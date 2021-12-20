@@ -71,8 +71,8 @@ def main(state, custom_day):
 if __name__ == '__main__':
     state = {
         "trace_id": "1124",
-        "expressway_number": "G1",
-        "section_id": "G1-1",
+        "expressway_number": "S15",
+        "section_id": "S15-1",
         "holiday": {
             "name": "guoqing",
             "start_date": "2021-10-01",
