@@ -1,0 +1,12 @@
+{
+  "host": "ip",
+  "user": "xxx",
+  "password": "xxx",
+  "port": "xxx",
+  "database_name":
+  {
+    "assistent": "assistent_decision",
+    "raw_data": "kpi",
+    "result": "forecast"
+  }
+}
