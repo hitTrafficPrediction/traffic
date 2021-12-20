@@ -74,7 +74,7 @@ if __name__ == '__main__':
         "config_id": "hfigfvigibios2784328",
     }
     # 拥堵指数阈值
-    threshold = 1
+    threshold = 1 (大于或等于)
     main(state, threshold, None)
 
     '''
