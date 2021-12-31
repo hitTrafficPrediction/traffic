@@ -372,11 +372,11 @@ def data_Fin_process(flow_result_up, flow_result_down, speed_result_up, speed_re
     elif mode == 'hour':
         for i in range(24):
             flow_up = (flow_result_up[4 * i] + flow_result_up[4 * i + 1] + flow_result_up[4 * i + 2] + flow_result_up[
-                4 * i + 3]) / 4
+                4 * i + 3])
             speed_up = (speed_result_up[4 * i] + speed_result_up[4 * i + 1] + speed_result_up[4 * i + 2] +
                         speed_result_up[4 * i + 3]) / 4
             flow_down = (flow_result_down[4 * i] + flow_result_down[4 * i + 1] + flow_result_down[4 * i + 2] +
-                         flow_result_down[4 * i + 3]) / 4
+                         flow_result_down[4 * i + 3])
             speed_down = (speed_result_down[4 * i] + speed_result_down[4 * i + 1] + speed_result_down[4 * i + 2] +
                           speed_result_down[4 * i + 3]) / 4
             result_up.append((flow_up, speed_up, traffic_index(flow_up, speed_up, mode, name)))
