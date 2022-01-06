@@ -322,7 +322,7 @@ def data_Pre_process(data_up, data_down):
 
     : return input_xx columns(features) for
     traffic_flow_total, avg_speed_car, sin(point_time), cos(point_time)
-    shape (1, 1, 96, 3) type numpy.array
+    shape (1, 1, 96, 4) type numpy.array
     """
     # 将list转化为DataFrame, 便于操作
     data_up = DataFrame(data_up)
@@ -404,7 +404,7 @@ def make_prediction(name, device, mode, data_up, data_down):
 
     # 数据预处理
     # traffic_flow_total, avg_speed_car, sin(point_time), cos(point_time)
-    # shape(1, 1, time_step, 3)
+    # shape(1, 1, time_step, 4)
     input_up, input_down = data_Pre_process(data_up, data_down)
 
     with torch.no_grad():
@@ -429,11 +429,31 @@ def make_prediction(name, device, mode, data_up, data_down):
         # result_xx now shape (time_step)
         flow_result_down[flow_result_down < 0] = 0
 
+        # 修改
+        # 预测速度（上行up、下行down） config/15minutes/section_id_up
+        state_dist = torch.load('config/speed', map_location=torch.device(device))
+        net.load_state_dict(state_dist)
+        # result_xx from NET shape (1, 1, time_step)
+        speed_result_up = net(A_wave, input_up)
+        speed_result_up = speed_result_up.cpu().numpy().astype(np.int)
+        speed_result_up = np.squeeze(speed_result_up)
+        # result_xx now shape (time_step)
+        speed_result_up[speed_result_up < 60] = 60
+        # speed_result_up[speed_result_up > 120] = 120
+
+        # result_xx from NET shape (1, 1, time_step)
+        speed_result_down = net(A_wave, input_down)
+        speed_result_down = speed_result_down.cpu().numpy().astype(np.int)
+        speed_result_down = np.squeeze(speed_result_down)
+        # result_xx now shape (time_step)
+        speed_result_down[speed_result_down < 60] = 60
+        # speed_result_up[speed_result_up > 120] = 120
+
     # 依据输入数据速度的平均值确定预测的速度值
-    input_up = input_up.cpu().numpy()
-    input_down = input_down.cpu().numpy()
-    avg_speed_up = np.full(96, np.mean(input_up[0, 0, :, 1]))
-    avg_speed_down = np.full(96, np.mean(input_down[0, 0, :, 1]))
+    # input_up = input_up.cpu().numpy()
+    # input_down = input_down.cpu().numpy()
+    # avg_speed_up = np.full(96, np.mean(input_up[0, 0, :, 1]))
+    # avg_speed_down = np.full(96, np.mean(input_down[0, 0, :, 1]))
 
     # 整合预测数据, 及计算拥堵指数
     # return result_up, result_down
@@ -441,7 +461,98 @@ def make_prediction(name, device, mode, data_up, data_down):
     # traffic_flow_total, avg_speed_car, traffic_index
     # shape (96, 3)
     # type list
-    return data_Fin_process(flow_result_up, flow_result_down, avg_speed_up, avg_speed_down, mode, name)
+    # return data_Fin_process(flow_result_up, flow_result_down, avg_speed_up, avg_speed_down, mode, name)
+    return data_Fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down, mode, name)
+
+
+def make_prediction_iteration(name, device, mode, input_up, input_down):
+    """
+    :参数 name 对应 section_id
+    :参数 device 模型运行设备
+    :参数 mode 模型运行模式, 15minutes/hour
+    :参数 input_xx 对应 上行、下行历史数据, 输入与输出格式一致, 便于迭代运行
+    shape(1, 1, time_step, 4) tensor
+    """
+    # 模型参数定义
+    time_step = 96
+
+    # 模型初始化
+    A_wave = torch.FloatTensor([[1]]).to(device=device)
+    net = STGCN(A_wave.shape[0], 4, time_step, time_step).to(device=device)
+
+    # 数据预处理
+    # traffic_flow_total, avg_speed_car, sin(point_time), cos(point_time)
+    # shape(1, 1, time_step, 4)
+    # input_up, input_down = data_Pre_process(data_up, data_down)
+    with torch.no_grad():
+        net.eval()
+
+        # 预测流量（上行up、下行down） config/15minutes/section_id_up
+        state_dist = torch.load('config/15minutes/' + name + '_up', map_location=torch.device(device))
+        net.load_state_dict(state_dist['state_dist'])
+        # result_xx from NET shape (1, 1, time_step)
+        flow_result_up = net(A_wave, input_up)
+        flow_result_up = flow_result_up.cpu().numpy().astype(np.int)
+        flow_result_up = np.squeeze(flow_result_up)
+        # result_xx now shape (time_step)
+        # 设定阈值
+        flow_result_up[flow_result_up < 0] = 0
+        flow_result_up[flow_result_up > 375] = 375
+
+        state_dist = torch.load('config/15minutes/' + name + '_down', map_location=torch.device(device))
+        net.load_state_dict(state_dist['state_dist'])
+        # result_xx from NET shape (1, 1, time_step)
+        flow_result_down = net(A_wave, input_down)
+        flow_result_down = flow_result_down.cpu().numpy().astype(np.int)
+        flow_result_down = np.squeeze(flow_result_down)
+        # result_xx now shape (time_step)
+        # 设定阈值
+        flow_result_down[flow_result_down < 0] = 0
+        flow_result_down[flow_result_down > 375] = 375
+
+        # 修改
+        # 预测速度（上行up、下行down） config/15minutes/section_id_up
+        state_dist = torch.load('config/speed', map_location=torch.device(device))
+        net.load_state_dict(state_dist)
+        # result_xx from NET shape (1, 1, time_step)
+        speed_result_up = net(A_wave, input_up)
+        speed_result_up = speed_result_up.cpu().numpy().astype(np.int)
+        speed_result_up = np.squeeze(speed_result_up)
+        # result_xx now shape (time_step)
+        # 设定阈值
+        speed_result_up[speed_result_up < 60] = 60
+        speed_result_up[speed_result_up > 120] = 120
+
+        # result_xx from NET shape (1, 1, time_step)
+        speed_result_down = net(A_wave, input_down)
+        speed_result_down = speed_result_down.cpu().numpy().astype(np.int)
+        speed_result_down = np.squeeze(speed_result_down)
+        # result_xx now shape (time_step)
+        # 设定阈值
+        speed_result_down[speed_result_down < 60] = 60
+        speed_result_down[speed_result_down > 120] = 120
+
+    # (96,) to (1, 1, 96, 4)
+    # 迭代数据返回
+    # next_data_up = np.concatenate((flow_result_up[np.newaxis, np.newaxis, :, np.newaxis], input_up[:, :, :, 1:2]), axis=3)
+    next_data_up = np.concatenate((flow_result_up[np.newaxis, np.newaxis, :, np.newaxis], speed_result_up[np.newaxis, np.newaxis, :, np.newaxis]), axis=3)
+    next_data_up = np.concatenate((next_data_up, input_up[:, :, :, :-2]), axis=3)
+
+    # next_data_down = np.concatenate((flow_result_down[np.newaxis, np.newaxis, :, np.newaxis], input_down[:, :, :, 1:2]), axis=3)
+    next_data_down = np.concatenate((flow_result_down[np.newaxis, np.newaxis, :, np.newaxis], speed_result_down[np.newaxis, np.newaxis, :, np.newaxis]), axis=3)
+    next_data_down = np.concatenate((next_data_down, input_down[:, :, :, :-2]), axis=3)
+    # print(next_data_down.shape)
+
+    # 整合预测数据, 及计算拥堵指数
+    # return result_up, result_down
+    # result_xx columns are
+    # traffic_flow_total, avg_speed_car, traffic_index
+    # shape (96, 3)
+    # type list
+    # return data_Fin_process(flow_result_up, flow_result_down, avg_speed_up, avg_speed_down, mode, name)
+    result_up, result_down = data_Fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down, mode, name)
+    return result_up, result_down, \
+        torch.from_numpy(next_data_up).float(), torch.from_numpy(next_data_down).float()
 
 
 def day_data_process(result_up, result_down, days, name):
@@ -731,6 +842,13 @@ def next_time_minutes(now, count):
 
     return next_time
 
+
+def next_day(now, count):
+    # 计算之前，之后时间对应的时间字符串
+    # 2021-01-25
+    next_time = (datetime.datetime.strptime(now, '%Y-%m-%d %H') + datetime.timedelta(days=+count)).strftime('%Y-%m-%d %H')
+
+    return next_time
 
 def load_user_config_sql():
     """
