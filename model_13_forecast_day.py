@@ -43,6 +43,7 @@ def main(state, custom_day):
     if custom_day:
         custom_time = custom_day + ' 00'
 
+    custom_time_read = custom_time + ':00:00'
     # 可根据实际情况指定设备为 cuda 而使用GPU#
     device = 'cpu'
 
@@ -55,7 +56,7 @@ def main(state, custom_day):
         # traffic_flow_total, avg_speed_car, point_time
         # len (96) list of tuple
         # input_data_up, input_data_down = read_local_data(section_id, '15minutes')
-        input_data_up, input_data_down = get15min_data(section_id, custom_time)
+        input_data_up, input_data_down = get15min_data(section_id, custom_time_read)
 
         # : result_xx columns are
         # traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
@@ -72,7 +73,7 @@ def main(state, custom_day):
         #   (70.71186553317577, 90.88928731770665, 4)   )   valley -> flow,speed,index(拥堵指数）
         # len(processed_xx) = prediction_days
         processed_up, processed_down = day_data_process(result_up, result_down, prediction_days, section_id)
-        print(processed_up)
+        # print(processed_up)
         writeday_data(state['trace_id'], state, custom_time.replace(' 00', ''), processed_up, processed_down)
 
 

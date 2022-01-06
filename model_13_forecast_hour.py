@@ -27,6 +27,7 @@ def main(state, custom_time):
     # 可根据实际情况指定设备为 cuda 而使用GPU
     device = 'cpu'
 
+    custom_time_read = custom_time + ':00:00'
     sections = state['section_id'].split(',')
     for section_id in sections:
         # 进行预测
@@ -36,7 +37,7 @@ def main(state, custom_time):
         # traffic_flow_total, avg_speed_car, point_time
         # shape (96) list of tuple
         # input_data_up, input_data_down = read_local_data(section_id, '15minutes')
-        input_data_up, input_data_down = get15min_data(section_id, custom_time)
+        input_data_up, input_data_down = get15min_data(section_id, custom_time_read)
 
         # : result_xx columns are
         # traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
@@ -51,11 +52,12 @@ def main(state, custom_time):
 
 if __name__ == '__main__':
     state = {
-        "trace_id": '012',
+        "trace_id": '0111',
         "expressway_number": "S15",
         "section_id": "S15-1",
         "custom_days": {}
     }
-    main(state, '2021-01-25 18')
+    main(state, '2021-10-25 18')
+    # main(state, None)
     # print(next_time_minutes(get_current_proximity_time_str(), -15))
 

@@ -32,6 +32,8 @@ def main(state, custom_day):
     if custom_day:
         custom_time = custom_day + ' 00'
 
+    custom_time_read = custom_time + ':00:00'
+
     # 可根据实际情况指定设备为 cuda 而使用GPU
     device = 'cpu'
 
@@ -44,7 +46,7 @@ def main(state, custom_day):
         # traffic_flow_total, avg_speed_car, point_time
         # len (96) list of tuple
         # input_data_up, input_data_down = read_local_data(section_id, '15minutes')
-        input_data_up, input_data_down = get15min_data(section_id, custom_time)
+        input_data_up, input_data_down = get15min_data(section_id, custom_time_read)
 
         # : result_xx columns are
         # traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
@@ -80,4 +82,4 @@ if __name__ == '__main__':
             "end_date": "2021-10-07"
         }
     }
-    main(state, None)
+    main(state, '2021-01-25')

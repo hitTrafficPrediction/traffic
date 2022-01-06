@@ -16,6 +16,7 @@ def main(state, custom_time):
     :参数 custom_time str格式
     可传入自定义时间以供测试，留空使用当前的时间
     示例：
+
     2021-01-25 18:45:00
     """
     # 可传入自定义时间以供测试，留空使用当前的时间
@@ -48,18 +49,19 @@ def main(state, custom_time):
         # show_img(result_up, 'index')
         # show_img(result_up, 'flow')
         # show_img(result_up, 'speed')
-        # : result_xx columns are
+        # # : result_xx columns are
         # traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
         # shape (96，3)
         write15min_data(state['trace_id'], state, custom_time, result_up, result_down)
 
 
+
 if __name__ == '__main__':
     state = {
-        "trace_id": "0156",
+        "trace_id": "6668",
         "expressway_number": "S15",
-        "section_id": "S15-1",
+        "section_id": "S15-6",
         "custom_days": {}
     }
-    main(state, '2021-10-26 18:45:00')
+    main(state, '2021-10-05 18:45:00')
 
