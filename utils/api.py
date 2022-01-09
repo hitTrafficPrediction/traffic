@@ -10,6 +10,9 @@ import torch.nn.functional as F
 from pandas.core.frame import DataFrame
 import datetime
 import pymysql
+from utils.db_operator import get15min_data
+
+from fbprophet import Prophet
 
 
 # 神经网络定义类
@@ -143,6 +146,74 @@ class STGCN(nn.Module):
         return out4
 
 
+# prophet 预测模型
+def prophet_model_flow(data: pd.DataFrame) -> pd.DataFrame:
+    df = pd.DataFrame({
+        'ds': data.time,
+        'y': data.flow,
+    })
+
+    df['cap'] = data.flow.values.max()
+    df['floor'] = data.flow.values.min()
+
+    # 考虑日周期性与周周期性
+    m = Prophet(
+        changepoint_prior_scale=0.05,
+        daily_seasonality=True,
+        weekly_seasonality=True,  # 周周期性
+        yearly_seasonality=False,  # 年周期性
+        growth="logistic",
+    )
+
+    m.fit(df)
+
+    # 直接预测未来14天的数值
+    future = m.make_future_dataframe(periods=14 * 24, freq='H')  # 预测时长
+    future['cap'] = data.flow.values.max()
+    future['floor'] = data.flow.values.min()
+
+    forecast = m.predict(future)
+
+    # fig = m.plot_components(forecast)
+    # fig1 = m.plot(forecast)
+
+    return forecast
+
+
+# prophet 预测模型
+def prophet_model_speed(data: pd.DataFrame) -> pd.DataFrame:
+    df = pd.DataFrame({
+        'ds': data.time,
+        'y': data.speed,
+    })
+
+    df['cap'] = data.speed.values.max()
+    df['floor'] = data.speed.values.min()
+
+    # 考虑日周期性与周周期性
+    m = Prophet(
+        changepoint_prior_scale=0.05,
+        daily_seasonality=True,
+        weekly_seasonality=True,  # 周周期性
+        yearly_seasonality=False,  # 年周期性
+        growth="logistic",
+    )
+
+    m.fit(df)
+
+    # 直接预测未来14天的数值
+    future = m.make_future_dataframe(periods=14 * 24, freq='H')  # 预测时长
+    future['cap'] = data.speed.values.max()
+    future['floor'] = data.speed.values.min()
+
+    forecast = m.predict(future)
+
+    # fig = m.plot_components(forecast)
+    # fig1 = m.plot(forecast)
+
+    return forecast
+
+
 # 依据显示时间计算对应时间标签
 def time_sin_minutes(index):
     # 2021-01-25 18:45:00
@@ -189,6 +260,54 @@ def days_interval(start, end):
     date2 = datetime.datetime.strptime(start[0:10], "%Y-%m-%d")
     num = (date1 - date2).days
     return num + 1
+
+
+def get15min_data_week(section_id, custom_time):
+    result_up = []
+    result_down = []
+
+    custom_time = next_day(custom_time, -7)
+    for i in range(7):
+        data_up, data_down = get15min_data(section_id, custom_time)
+        for item_up in data_up:
+            result_up.append(item_up)
+        for item_down in data_down:
+            result_down.append(item_down)
+
+        custom_time = next_day(custom_time, 1)
+
+    return result_up, result_down
+
+
+def read_local_data_week(section_id):
+    """
+    本地测试用, 读取一个星期的历史数据
+    : return input_data_up, input_data_down 历史数据
+
+    traffic_flow_total, avg_speed_car, point_time
+    shape (96*7) list of tuple
+    """
+    local_dir = 'example_data/'
+    time_step = 96*7
+
+    result_up = []
+    result_down = []
+
+    #   0,     1,          2,          3,            4,               5,         6,        7           8                   9
+    # index,section_id,direction,point_time,traffic_flow_total,avg_speed_car,time_calc,if_next_time, hour_minutes_sin, hour_minutes_cos
+    df_up = pd.read_csv(local_dir + section_id + '_up.csv')
+    df_down = pd.read_csv(local_dir + section_id + '_down.csv')
+    data_up = df_up[['traffic_flow_total', 'avg_speed_car', 'point_time']]
+    data_down = df_down[['traffic_flow_total', 'avg_speed_car', 'point_time']]
+
+    max_number = min(data_up.shape[0], data_down.shape[0])
+    indices = int(np.random.uniform(low=0.0, high=max_number - time_step))
+    for i in range(time_step):
+        result_up.append((data_up.iloc[indices + i, 0], data_up.iloc[indices + i, 1], data_up.iloc[indices + i, 2]))
+        result_down.append(
+            (data_down.iloc[indices + i, 0], data_down.iloc[indices + i, 1], data_down.iloc[indices + i, 2]))
+
+    return result_up, result_down
 
 
 def read_local_data(section_id, mode):
@@ -535,11 +654,14 @@ def make_prediction_iteration(name, device, mode, input_up, input_down):
     # (96,) to (1, 1, 96, 4)
     # 迭代数据返回
     # next_data_up = np.concatenate((flow_result_up[np.newaxis, np.newaxis, :, np.newaxis], input_up[:, :, :, 1:2]), axis=3)
-    next_data_up = np.concatenate((flow_result_up[np.newaxis, np.newaxis, :, np.newaxis], speed_result_up[np.newaxis, np.newaxis, :, np.newaxis]), axis=3)
+    next_data_up = np.concatenate(
+        (flow_result_up[np.newaxis, np.newaxis, :, np.newaxis], speed_result_up[np.newaxis, np.newaxis, :, np.newaxis]),
+        axis=3)
     next_data_up = np.concatenate((next_data_up, input_up[:, :, :, :-2]), axis=3)
 
     # next_data_down = np.concatenate((flow_result_down[np.newaxis, np.newaxis, :, np.newaxis], input_down[:, :, :, 1:2]), axis=3)
-    next_data_down = np.concatenate((flow_result_down[np.newaxis, np.newaxis, :, np.newaxis], speed_result_down[np.newaxis, np.newaxis, :, np.newaxis]), axis=3)
+    next_data_down = np.concatenate((flow_result_down[np.newaxis, np.newaxis, :, np.newaxis],
+                                     speed_result_down[np.newaxis, np.newaxis, :, np.newaxis]), axis=3)
     next_data_down = np.concatenate((next_data_down, input_down[:, :, :, :-2]), axis=3)
     # print(next_data_down.shape)
 
@@ -550,9 +672,99 @@ def make_prediction_iteration(name, device, mode, input_up, input_down):
     # shape (96, 3)
     # type list
     # return data_Fin_process(flow_result_up, flow_result_down, avg_speed_up, avg_speed_down, mode, name)
-    result_up, result_down = data_Fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down, mode, name)
+    result_up, result_down = data_Fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down,
+                                              mode, name)
     return result_up, result_down, \
-        torch.from_numpy(next_data_up).float(), torch.from_numpy(next_data_down).float()
+           torch.from_numpy(next_data_up).float(), torch.from_numpy(next_data_down).float()
+
+
+def prophet_pre_process(data_up, data_down):
+    """
+    将输入数据处理为pandas表格
+    """
+    data_up_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
+    data_down_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
+    for i in data_up:
+        data_up_pd = data_up_pd.append({'flow': i[0], 'speed': i[1], 'time': i[2]}, ignore_index=True)
+    for j in data_down:
+        data_down_pd = data_down_pd.append({'flow': j[0], 'speed': j[1], 'time': j[2]}, ignore_index=True)
+
+    # data_up_pd['time'] = pd.to_datetime(data_up_pd['time'], format='%Y-%m-%d %H:%M:%S')
+    # data_down_pd['time'] = pd.to_datetime(data_down_pd['time'], format='%Y-%m-%d %H:%M:%S')
+
+    return data_up_pd, data_down_pd
+
+
+def prophet_fin_process(flow_up, flow_down, speed_up, speed_down, name):
+    """
+    整合预测数据, 及计算拥堵指数
+    : param xx_xx is flow/speed; list
+    len (24)
+    : param name 用于确定车道数量以计算拥堵指数
+
+    : return result_up, result_down; list
+    result_xx columns are
+    traffic_flow_total, avg_speed_car, traffic_index
+    shape (14, 24, 3)
+    14天的24小时的 流量 速度 拥堵指数
+    """
+    result_up = []
+    result_down = []
+
+    # 14天中的24小时
+    for i in range(14):
+        day_temp_up = []
+        day_temp_down = []
+        for j in range(24):
+            day_temp_up.append((flow_up[i * 24 + j], speed_up[i * 24 + j],
+                                traffic_index(flow_up[i * 24 + j], speed_up[i * 24 + j], 'minutes', name)))
+            day_temp_down.append((flow_down[i * 24 + j], speed_down[i * 24 + j],
+                                  traffic_index(flow_down[i * 24 + j], speed_down[i * 24 + j], 'minutes', name)))
+
+        result_up.append(day_temp_up)
+        result_down.append(day_temp_down)
+
+    return result_up, result_down
+
+
+def make_prediction_prophet(name, data_up, data_down):
+    """
+    一次预测未来14天数据
+
+    :参数 name 对应 section_id
+    :参数 device 模型运行设备
+    :参数 mode 模型运行模式, 15minutes/hour
+    :参数 data_xx 对应 上行、下行历史数据 list
+    """
+    # 数据预处理
+    # columns=['flow', 'speed', 'time']
+    # 一个星期
+    # pandas 96*7 rows
+    # input_up, input_down = prophet_pre_process(data_up, data_down)
+    input_up = pd.read_csv('example_data/up.csv')
+    input_down = pd.read_csv('example_data/down.csv')
+
+    # 预测流量
+    flow_up = prophet_model_flow(input_up)
+    flow_down = prophet_model_flow(input_down)
+
+    # 预测速度
+    speed_up = prophet_model_speed(input_up)
+    speed_down = prophet_model_speed(input_down)
+
+    # numpy.ndarray 24*14
+    flow_result_up = flow_up.yhat.values
+    flow_result_down = flow_down.yhat.values
+    speed_result_up = speed_up.yhat.values
+    speed_result_down = speed_down.yhat.values
+
+    # 整合预测数据, 及计算拥堵指数
+    # : return result_up, result_down;
+    # list result_xx columns are
+    # traffic_flow_total, avg_speed_car, traffic_index
+    # shape(14, 24, 3)
+    # 14天的24小时的 流量 速度 拥堵指数
+    return prophet_fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down, name)
 
 
 def day_data_process(result_up, result_down, days, name):
@@ -846,9 +1058,11 @@ def next_time_minutes(now, count):
 def next_day(now, count):
     # 计算之前，之后时间对应的时间字符串
     # 2021-01-25
-    next_time = (datetime.datetime.strptime(now, '%Y-%m-%d %H') + datetime.timedelta(days=+count)).strftime('%Y-%m-%d %H')
+    next_time = (datetime.datetime.strptime(now, '%Y-%m-%d %H') + datetime.timedelta(days=+count)).strftime(
+        '%Y-%m-%d %H')
 
     return next_time
+
 
 def load_user_config_sql():
     """

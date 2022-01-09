@@ -1,6 +1,6 @@
 import numpy
-
-from Traffic_Model.utils.time_processor import get_time_backward_15min_sequence, get_time_backward_hour_sequence, \
+import datetime
+from utils.time_processor import get_time_backward_15min_sequence, get_time_backward_hour_sequence, \
     get_time_forward_15min_sequence, get_day_from_time_str, get_time_point_from_time_str, get_day_start_time_str, \
     get_time_forward_hour_sequence, get_time_forward_day_sequence, get_time_forward_30min_sequence
 
@@ -33,6 +33,32 @@ def init_db():
                                     )
     except:
         print("db configuration invalid ")
+
+
+def next_day(now, count):
+    # 计算之前，之后时间对应的时间字符串
+    # 2021-01-25
+    next_time = (datetime.datetime.strptime(now, '%Y-%m-%d %H:%M:%S') + datetime.timedelta(days=+count)).strftime(
+        '%Y-%m-%d %H:%M:%S')
+
+    return next_time
+
+
+def get15min_data_week(section_id, custom_time):
+    result_up = []
+    result_down = []
+
+    custom_time = next_day(custom_time, -6)
+    for i in range(7):
+        data_up, data_down = get15min_data(section_id, custom_time)
+        for item_up in data_up:
+            result_up.append(item_up)
+        for item_down in data_down:
+            result_down.append(item_down)
+
+        custom_time = next_day(custom_time, 1)
+
+    return result_up, result_down
 
 
 def get15min_data(road_section, custom_time):
@@ -82,7 +108,7 @@ def get15min_data(road_section, custom_time):
     finally:
         db_data.close()
     assert (len(data_up) == 96 and len(data_down)), '数据缺失'
-    return [data_up,data_down]
+    return [data_up, data_down]
     # return data
 
 
@@ -334,8 +360,8 @@ def write_congestion_data(trace_id, state, prediction_start_time, result_up, res
             detail_result_up_processed.append(detail_item)
             warning_period_up.append(time_seq[idx])
     brief_item_up = (
-    trace_id, state['expressway_number'], state['section_id'], 0, get_day_from_time_str(prediction_start_time),
-    "[" + str(warning_period_up) + "]")
+        trace_id, state['expressway_number'], state['section_id'], 0, get_day_from_time_str(prediction_start_time),
+        "[" + str(warning_period_up) + "]")
 
     for idx, item in enumerate(result_down):
         traffic_index = item
@@ -348,8 +374,8 @@ def write_congestion_data(trace_id, state, prediction_start_time, result_up, res
             detail_result_down_processed.append(detail_item)
             warning_period_down.append(time_seq[idx])
     brief_item_down = (
-    trace_id, state['expressway_number'], state['section_id'], 1, get_day_from_time_str(prediction_start_time),
-    "[" + str(warning_period_down) + "]")
+        trace_id, state['expressway_number'], state['section_id'], 1, get_day_from_time_str(prediction_start_time),
+        "[" + str(warning_period_down) + "]")
 
     write_congestion_brief = f'''
                    INSERT INTO {result_table_congestion_brief} (trace_id,expressway_number,section_id,direction,time_day,warning_period)
