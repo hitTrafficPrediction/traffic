@@ -1,3 +1,5 @@
+import sys
+
 from utils.api import make_prediction, read_local_data, days_interval, day_data_process
 from utils.time_processor import get_day_start_time, get_current_proximity_time_str
 from utils.db_operator import writeday_data, get15min_data
