@@ -740,9 +740,10 @@ def make_prediction_prophet(name, data_up, data_down):
     # columns=['flow', 'speed', 'time']
     # 一个星期
     # pandas 96*7 rows
-    # input_up, input_down = prophet_pre_process(data_up, data_down)
-    input_up = pd.read_csv('example_data/up.csv')
-    input_down = pd.read_csv('example_data/down.csv')
+    input_up, input_down = prophet_pre_process(data_up, data_down)
+
+    # input_up = pd.read_csv('example_data/up.csv')
+    # input_down = pd.read_csv('example_data/down.csv')
 
     # 预测流量
     flow_up = prophet_model_flow(input_up)
@@ -753,10 +754,10 @@ def make_prediction_prophet(name, data_up, data_down):
     speed_down = prophet_model_speed(input_down)
 
     # numpy.ndarray 24*14
-    flow_result_up = flow_up.yhat.values
-    flow_result_down = flow_down.yhat.values
-    speed_result_up = speed_up.yhat.values
-    speed_result_down = speed_down.yhat.values
+    flow_result_up = flow_up.yhat.values[-24*14:]
+    flow_result_down = flow_down.yhat.values[-24*14:]
+    speed_result_up = speed_up.yhat.values[-24*14:]
+    speed_result_down = speed_down.yhat.values[-24*14:]
 
     # 整合预测数据, 及计算拥堵指数
     # : return result_up, result_down;
