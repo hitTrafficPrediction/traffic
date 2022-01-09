@@ -70,7 +70,6 @@ def main(state, custom_day):
         # (69.0, 100.0, 4) -> traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
         # shape (24) list of tuple
         result_up, result_down = make_prediction_prophet(section_id, input_data_up, input_data_down)
-
         for i in range(prediction_days):
             writehour_data(state['trace_id'], state, custom_time + ':00:00', result_up[i], result_down[i])
             custom_time = next_day(custom_time, 1)
