@@ -11,7 +11,7 @@ from pandas.core.frame import DataFrame
 import datetime
 import pymysql
 from utils.db_operator import get15min_data
-
+from scipy import optimize as op
 from fbprophet import Prophet
 
 
@@ -288,7 +288,7 @@ def read_local_data_week(section_id):
     shape (96*7) list of tuple
     """
     local_dir = 'example_data/'
-    time_step = 96*7
+    time_step = 96 * 7
 
     result_up = []
     result_down = []
@@ -699,7 +699,7 @@ def prophet_fin_process(flow_up, flow_down, speed_up, speed_down, name):
     """
     整合预测数据, 及计算拥堵指数
     : param xx_xx is flow/speed; list
-    len (24)
+    len (24*14)
     : param name 用于确定车道数量以计算拥堵指数
 
     : return result_up, result_down; list
@@ -717,9 +717,9 @@ def prophet_fin_process(flow_up, flow_down, speed_up, speed_down, name):
         day_temp_down = []
         for j in range(24):
             day_temp_up.append((flow_up[i * 24 + j], speed_up[i * 24 + j],
-                                traffic_index(flow_up[i * 24 + j], speed_up[i * 24 + j], 'minutes', name)))
+                                traffic_index(flow_up[i * 24 + j], speed_up[i * 24 + j], 'hour', name)))
             day_temp_down.append((flow_down[i * 24 + j], speed_down[i * 24 + j],
-                                  traffic_index(flow_down[i * 24 + j], speed_down[i * 24 + j], 'minutes', name)))
+                                  traffic_index(flow_down[i * 24 + j], speed_down[i * 24 + j], 'hour', name)))
 
         result_up.append(day_temp_up)
         result_down.append(day_temp_down)
@@ -742,6 +742,8 @@ def make_prediction_prophet(name, data_up, data_down):
     # pandas 96*7 rows
     input_up, input_down = prophet_pre_process(data_up, data_down)
 
+    # input_up = pd.read_csv('example_data/up.csv').sample(frac=0.2)
+    # input_down = pd.read_csv('example_data/down.csv').sample(frac=0.2)
     # input_up = pd.read_csv('example_data/up.csv')
     # input_down = pd.read_csv('example_data/down.csv')
 
@@ -754,10 +756,10 @@ def make_prediction_prophet(name, data_up, data_down):
     speed_down = prophet_model_speed(input_down)
 
     # numpy.ndarray 24*14
-    flow_result_up = flow_up.yhat.values[-24*14:]
-    flow_result_down = flow_down.yhat.values[-24*14:]
-    speed_result_up = speed_up.yhat.values[-24*14:]
-    speed_result_down = speed_down.yhat.values[-24*14:]
+    flow_result_up = flow_up.yhat.values[-24 * 14:]
+    flow_result_down = flow_down.yhat.values[-24 * 14:]
+    speed_result_up = speed_up.yhat.values[-24 * 14:]
+    speed_result_down = speed_down.yhat.values[-24 * 14:]
 
     # 整合预测数据, 及计算拥堵指数
     # : return result_up, result_down;
@@ -1107,3 +1109,107 @@ def final_reshape(up, down):
     将列表降维
     """
     return np.array(up).flatten().tolist(), np.array(down).flatten().tolist()
+
+
+def fourier_fit(x, base, *a):
+    y = base
+    i_max = 1
+    # 日变化
+    for i in range(1, 3):
+        y = y + a[i - 1] * np.cos(2 * np.pi * i * x / 96) + a[-i] * np.sin(2 * np.pi * i * x / 96)
+        i_max = i
+
+    # 周变化
+    for j in range(1, 4):
+        y = y + a[j + i_max - 1] * np.cos(2 * np.pi * j * x / 96 * 7) + a[-j - i_max] * np.sin(
+            2 * np.pi * j * x / 96 * 7)
+
+    return y
+
+
+def fourier_pre_process(data_up, data_down):
+    """
+    数据格式预处理
+    """
+    # 读取本地数据以供测试
+    # data_up = pd.read_csv('example_data/up.csv')
+    # data_down = pd.read_csv('example_data/down.csv')
+
+    x_group = np.arange(96 * 7)
+    flow_up = data_up['flow']
+    flow_down = data_down['flow']
+    speed_up = data_up['speed']
+    speed_down = data_down['speed']
+
+    return x_group, flow_up, flow_down, speed_up, speed_down
+
+
+def make_prediction_fourier(name, input_data_up, input_data_down):
+    """
+    参考prophet中的原理, 由于14天的交通数据中, 流量自然增长带来的影响很小，则除去prophet中关于自然增长的拟合, 而仅保留傅里叶级数拟合的部分, 以减少计算时间
+    """
+    x_group, input_up_flow, input_down_flow, input_up_speed, input_down_speed = fourier_pre_process(input_data_up,
+                                                                                                    input_data_down)
+
+    # 估计参数
+    popt_flow_up = op.curve_fit(fourier_fit, x_group, input_up_flow, [1.0] * 9)[0]
+    popt_flow_down = op.curve_fit(fourier_fit, x_group, input_down_flow, [1.0] * 9)[0]
+    popt_speed_up = op.curve_fit(fourier_fit, x_group, input_up_speed, [1.0] * 9)[0]
+    popt_speed_down = op.curve_fit(fourier_fit, x_group, input_down_speed, [1.0] * 9)[0]
+
+    # 计算未来值
+    x_predict = np.arange(96 * 7, 96 * 21)
+
+    # numpy.ndarray 96*14
+    flow_result_up = fourier_fit(x_predict, *popt_flow_up)
+    flow_result_down = fourier_fit(x_predict, *popt_flow_down)
+    speed_result_up = fourier_fit(x_predict, *popt_speed_up)
+    speed_result_down = fourier_fit(x_predict, *popt_speed_down)
+
+    # 整合预测数据, 及计算拥堵指数
+    # : return result_up, result_down;
+    # list result_xx columns are
+    # traffic_flow_total, avg_speed_car, traffic_index
+    # shape(14, 24, 3)
+    # 14天的24小时的 流量 速度 拥堵指数
+    return fourier_fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down, name)
+
+
+def fourier_fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down, name):
+    """
+    整合预测数据, 及计算拥堵指数
+    : param xx_xx is flow/speed; list
+    len (96*14)
+    : param name 用于确定车道数量以计算拥堵指数
+
+    : return result_up, result_down; list
+    result_xx columns are
+    traffic_flow_total, avg_speed_car, traffic_index
+    shape (14, 24, 3)
+    14天的24小时的 流量 速度 拥堵指数
+    """
+    result_up = []
+    result_down = []
+
+    # 14天中的96分钟
+    for j in range(14):
+        day_temp_up = []
+        day_temp_down = []
+        for i in range(24):
+            flow_up = (flow_result_up[4 * i + 96 * j] + flow_result_up[4 * i + 1 + 96 * j] + flow_result_up[
+                4 * i + 2 + 96 * j] + flow_result_up[4 * i + 3 + 96 * j])
+            speed_up = (speed_result_up[4 * i + 96 * j] + speed_result_up[4 * i + 1 + 96 * j] + speed_result_up[
+                4 * i + 2 + 96 * j] + speed_result_up[4 * i + 3 + 96 * j]) / 4
+            flow_down = (flow_result_down[4 * i + 96 * j] + flow_result_down[4 * i + 1 + 96 * j] + flow_result_down[
+                4 * i + 2 + 96 * j] + flow_result_down[4 * i + 3 + 96 * j])
+            speed_down = (speed_result_down[4 * i + 96 * j] + speed_result_down[4 * i + 1 + 96 * j] + speed_result_down[
+                4 * i + 2 + 96 * j] + speed_result_down[4 * i + 3 + 96 * j]) / 4
+
+            day_temp_up.append((flow_up, speed_up, traffic_index(flow_up, speed_up, 'hour', name)))
+            day_temp_down.append((flow_up, speed_up, traffic_index(flow_down, speed_down, 'hour', name)))
+
+        result_up.append(day_temp_up)
+        result_down.append(day_temp_down)
+
+    return result_up, result_down
+
