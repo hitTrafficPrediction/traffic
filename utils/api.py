@@ -1131,22 +1131,33 @@ def fourier_pre_process(data_up, data_down):
     """
     数据格式预处理
     """
+    data_up_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
+    data_down_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
+    for i in data_up:
+        data_up_pd = data_up_pd.append({'flow': i[0], 'speed': i[1], 'time': i[2]}, ignore_index=True)
+    for j in data_down:
+        data_down_pd = data_down_pd.append({'flow': j[0], 'speed': j[1], 'time': j[2]}, ignore_index=True)
+
+    # data_up_pd['time'] = pd.to_datetime(data_up_pd['time'], format='%Y-%m-%d %H:%M:%S')
+    # data_down_pd['time'] = pd.to_datetime(data_down_pd['time'], format='%Y-%m-%d %H:%M:%S')
+
     # 读取本地数据以供测试
-    # data_up = pd.read_csv('example_data/up.csv')
-    # data_down = pd.read_csv('example_data/down.csv')
+    # data_up_pd = pd.read_csv('example_data/up.csv')
+    # data_down_pd = pd.read_csv('example_data/down.csv')
 
     x_group = np.arange(96 * 7)
-    flow_up = data_up['flow']
-    flow_down = data_down['flow']
-    speed_up = data_up['speed']
-    speed_down = data_down['speed']
+    flow_up = data_up_pd['flow']
+    flow_down = data_down_pd['flow']
+    speed_up = data_up_pd['speed']
+    speed_down = data_down_pd['speed']
 
     return x_group, flow_up, flow_down, speed_up, speed_down
 
 
 def make_prediction_fourier(name, input_data_up, input_data_down):
     """
-    参考prophet中的原理, 由于14天的交通数据中, 流量自然增长带来的影响很小，则除去prophet中关于自然增长的拟合, 而仅保留傅里叶级数拟合的部分, 以减少计算时间
+    参考prophet中的原理, 由于14天的交通数据中, 流量自然增长带来的影响很小，则除去prophet中关于自然增长的拟合,
+    而仅保留傅里叶级数拟合的部分, 以减少计算时间
     """
     x_group, input_up_flow, input_down_flow, input_up_speed, input_down_speed = fourier_pre_process(input_data_up,
                                                                                                     input_data_down)

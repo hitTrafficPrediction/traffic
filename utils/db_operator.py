@@ -1,5 +1,10 @@
+import sys
+
 import numpy
 import datetime
+
+import numpy as np
+
 from utils.time_processor import get_time_backward_15min_sequence, get_time_backward_hour_sequence, \
     get_time_forward_15min_sequence, get_day_from_time_str, get_time_point_from_time_str, get_day_start_time_str, \
     get_time_forward_hour_sequence, get_time_forward_day_sequence, get_time_forward_30min_sequence
@@ -44,7 +49,7 @@ def next_day(now, count):
     return next_time
 
 
-def get15min_data_week(section_id, custom_time):
+def get15min_data_week_(section_id, custom_time):
     result_up = []
     result_down = []
 
@@ -61,7 +66,56 @@ def get15min_data_week(section_id, custom_time):
     return result_up, result_down
 
 
-def get15min_data(road_section, custom_time):
+def get15min_data_week(road_section, custom_time):
+    init_db()
+    cursor_data = db_data.cursor()
+    data_table_15min = "section_condition_15minute"
+
+    # 使得输入可以为24:00:00
+    # custom_data = custom_time.split(' ')[0]
+    # custom_time = custom_time.split(' ')[1].replace('24', '00')
+    # custom_time = custom_data + ' ' + custom_time
+    time_seq = get_time_backward_15min_sequence(custom_time, 96*7)
+    # end of edit
+
+    # 将查询数据库的对应时间改为24:00:00
+    # for idx, item in enumerate(time_seq):
+    #     custom_time = item.split(' ')[1]
+    #     if custom_time == '00:00:00':
+    #         custom_time = '24:00:00'
+    #     time_seq[idx] = item.split(' ')[0] + ' ' + custom_time
+    time_seq = '\',\''.join(time_seq)
+    # end of edit
+
+    get15min_SQL = f'''
+        SELECT traffic_flow_total,avg_speed_car, point_time_start, direction
+        FROM {data_table_15min}
+        WHERE section_id = '{road_section}' AND point_time_start in ('{time_seq}')
+        ORDER BY point_time_start
+        '''
+
+    data_up = []
+    data_down = []
+    try:
+        # 执行sql
+        cursor_data.execute(get15min_SQL)
+        data = cursor_data.fetchall()
+
+        for i in range(len(data)):
+            if data[i][3] == '上行':
+                data_up.append(data[i][:3])
+            else:
+                data_down.append(data[i][:3])
+    except Exception as e:
+        print(e)
+        print('插入失败')
+    finally:
+        db_data.close()
+    assert (len(data_up) == 96*7 and len(data_down)), '数据缺失'
+    return [data_up, data_down]
+
+
+def get15min_data_(road_section, custom_time):
     init_db()
     cursor_data = db_data.cursor()
     data_table_15min = "section_condition_15minute"
@@ -102,6 +156,55 @@ def get15min_data(road_section, custom_time):
         data_down = cursor_data.fetchall()
         cursor_data.execute(get15min_SQL_up)
         data_up = cursor_data.fetchall()
+    except Exception as e:
+        print(e)
+        print('插入失败')
+    finally:
+        db_data.close()
+    assert (len(data_up) == 96 and len(data_down)), '数据缺失'
+    return [data_up, data_down]
+    # return data
+
+
+def get15min_data(road_section, custom_time):
+    init_db()
+    cursor_data = db_data.cursor()
+    data_table_15min = "section_condition_15minute"
+
+    # 使得输入可以为24:00:00
+    # custom_data = custom_time.split(' ')[0]
+    # custom_time = custom_time.split(' ')[1].replace('24', '00')
+    # custom_time = custom_data + ' ' + custom_time
+    time_seq = get_time_backward_15min_sequence(custom_time, 96)
+    # end of edit
+
+    # 将查询数据库的对应时间改为24:00:00
+    # for idx, item in enumerate(time_seq):
+    #     custom_time = item.split(' ')[1]
+    #     if custom_time == '00:00:00':
+    #         custom_time = '24:00:00'
+    #     time_seq[idx] = item.split(' ')[0] + ' ' + custom_time
+    time_seq = '\',\''.join(time_seq)
+    # end of edit
+
+    get15min_SQL = f'''
+    SELECT traffic_flow_total,avg_speed_car, point_time_start, direction 
+    FROM {data_table_15min}
+    WHERE section_id = '{road_section}' AND point_time_start in ('{time_seq}')
+    ORDER BY point_time_start
+    '''
+    data_up = []
+    data_down = []
+    try:
+        # 执行sql
+        cursor_data.execute(get15min_SQL)
+        data = cursor_data.fetchall()
+
+        for i in range(len(data)):
+            if data[i][3] == '上行':
+                data_up.append(data[i][:3])
+            else:
+                data_down.append(data[i][:3])
     except Exception as e:
         print(e)
         print('插入失败')
