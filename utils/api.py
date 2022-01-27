@@ -756,8 +756,8 @@ def make_prediction_prophet(name, data_up, data_down):
     speed_down = prophet_model_speed(input_down)
 
     # numpy.ndarray 24*14
-    flow_result_up = flow_up.yhat.values[-24 * 14:]
-    flow_result_down = flow_down.yhat.values[-24 * 14:]
+    flow_result_up = flow_up.yhat.values[-24 * 14:]*4
+    flow_result_down = flow_down.yhat.values[-24 * 14:]*4
     speed_result_up = speed_up.yhat.values[-24 * 14:]
     speed_result_down = speed_down.yhat.values[-24 * 14:]
 
