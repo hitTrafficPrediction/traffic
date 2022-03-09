@@ -1,7 +1,7 @@
-from utils.api import make_prediction, read_local_data, get_user_config, congestion_data_process, next_time_minutes, \
-    final_reshape
+from utils.api import make_prediction, read_local_data, get_user_config, congestion_data_process_n, next_time_minutes, \
+    final_reshape, make_prediction_prophet_congestion
 from utils.time_processor import get_day_start_time, get_current_proximity_time_str
-from utils.db_operator import write_congestion_data, get15min_data
+from utils.db_operator import write_congestion_data, get15min_data, get15min_data_week
 
 
 def main(state, threshold, custom_day):
@@ -39,24 +39,23 @@ def main(state, threshold, custom_day):
         section_id = section_id.replace(' ', '')
         # : input_data_xx columns are
         # traffic_flow_total, avg_speed_car, point_time
-        # len (96) list of tuple
+        # len (96*7) list of tuple
         # input_data_up, input_data_down = read_local_data(section_id, '15minutes')
-        input_data_up, input_data_down = get15min_data(section_id, custom_time_read)
+        input_data_up, input_data_down = get15min_data_week(section_id, custom_time_read)
 
         # : result_xx columns are
         # traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
         # example (result_xx[0])
-        # (69.0, 100.0, 4) -> traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
-        # shape (96) list of tuple
-        result_up, result_down = make_prediction(section_id, device, '15minutes', input_data_up, input_data_down)
+        # (69.0, 100.0, 4) -> traffic_flow_total, avg_speed_car, traffic_index(拥堵指数)
+        # shape (48*n) list of tuple
+        result_up, result_down = make_prediction_prophet_congestion(section_id, '30minutes', input_data_up, input_data_down,
+                                                           prediction_days)
 
-        # : processed_xx columns are
+        # processed_xx columns are
         # 48 粒度 of traffic_index(拥堵指数)
         # example (result_xx[0])
         # [1, 1, ... 5, 3]
-        processed_up, process_down = congestion_data_process(result_up, result_down, prediction_days, section_id)
-
-        reshape_up, reshape_down = final_reshape(processed_up, process_down)
+        processed_up, process_down = congestion_data_process_n(result_up, result_down)
 
         expressway_number, _ = section_id.split('-')
         n_state = {
@@ -66,16 +65,17 @@ def main(state, threshold, custom_day):
             "prediction_days": prediction_days
         }
 
-        write_congestion_data(state['trace_id'], n_state, custom_time + ':00:00', reshape_up, reshape_down, threshold)
+        write_congestion_data(state['trace_id'], n_state, custom_time + ':00:00', processed_up, process_down, threshold)
 
 
 if __name__ == '__main__':
     state = {
-        "trace_id": "6671",
+        "trace_id": "16671",
         "config_id": "hfigfvigibios2784328",
     }
     # 拥堵指数阈值
     threshold = 1
+
     main(state, threshold, '2021-01-25')
 
     '''

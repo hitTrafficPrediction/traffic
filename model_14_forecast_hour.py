@@ -1,5 +1,5 @@
-from utils.db_operator import write_festival_data, get15min_data
-from utils.api import make_prediction, read_local_data, days_interval, holiday_data_process_hour
+from utils.db_operator import write_festival_data, get15min_data, get15min_data_week
+from utils.api import make_prediction, read_local_data, days_interval, holiday_data_process_hour, make_prediction_prophet_n
 from utils.time_processor import get_day_start_time, get_current_proximity_time_str
 import datetime as dt
 
@@ -28,6 +28,7 @@ def main(state, custom_day):
     # 获取当前时间以供预测
     custom_time = get_current_proximity_time_str()
     custom_time = get_day_start_time(custom_time).strftime("%Y-%m-%d %H")
+    start_time, _ = custom_time.split(' ')
 
     if custom_day:
         custom_time = custom_day + ' 00'
@@ -45,33 +46,21 @@ def main(state, custom_day):
         # traffic_flow_total, avg_speed_car, point_time
         # len (96) list of tuple
         # input_data_up, input_data_down = read_local_data(section_id, '15minutes')
-        input_data_up, input_data_down = get15min_data(section_id, custom_time_read)
+        input_data_up, input_data_down = get15min_data_week(section_id, custom_time_read)
 
         # : result_xx columns are
         # traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
         # example (result_xx[0])
-        # (69.0, 100.0, 4) -> traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
-        # shape (24) list of tuple
-        result_up, result_down = make_prediction(section_id, device, 'hour', input_data_up, input_data_down)
+        # (69.0, 100.0, 4) -> traffic_flow_total, avg_speed_car, traffic_index(拥堵指数)
+        # shape (48) list of tuple
+        result_up, result_down = make_prediction_prophet_n(section_id, 'hour', input_data_up, input_data_down, prediction_days)
 
-        # : processed_xx columns are
-        # 24 粒度 of (traffic_flow_total, avg_speed_car, traffic_index(拥堵指数) ) a day
-        # example (result_xx[0], which is the first day's data)
-        # [79.41736302394557, 118.53337764767996, 4.0], 00:00's data for traffic_flow_total, avg_speed_car, traffic_index(拥堵指数)
-        # [90.08536701223676, 118.53337764767996, 4.0], 01:00's data
-        # ...
-        # [99.56803722405115, 118.53337764767996, 4.0], 23:00's data
-        # [96.01203589462077, 118.53337764767996, 4.0], 24:00's data
-        # len(processed_xx) ==  prediction_days+6, list of tuple/list
-        processed_up, processed_down = holiday_data_process_hour(result_up, result_down, prediction_days, section_id)
-
-        start_time = (dt.datetime.strptime(state["holiday"]["start_date"], '%Y-%m-%d') + dt.timedelta(days=-3)).strftime('%Y-%m-%d')
-        write_festival_data(state['trace_id'], state, start_time + ' 00:00:00', processed_up, processed_down, 'hour')
+        write_festival_data(state['trace_id'], state, start_time + ' 00:00:00', result_up, result_down, 'hour')
 
 
 if __name__ == '__main__':
     state = {
-        "trace_id": "1124",
+        "trace_id": "11125",
         "expressway_number": "S15",
         "section_id": "S15-1",
         "holiday": {
