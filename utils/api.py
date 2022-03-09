@@ -13,6 +13,7 @@ import pymysql
 from utils.db_operator import get15min_data
 from scipy import optimize as op
 from fbprophet import Prophet
+from neuralprophet import NeuralProphet
 
 
 # 神经网络定义类
@@ -214,6 +215,72 @@ def prophet_model_speed(data: pd.DataFrame) -> pd.DataFrame:
     return forecast
 
 
+# prophet 预测模型
+def prophet_model_flow_n(data: pd.DataFrame, type, days) -> pd.DataFrame:
+    df = pd.DataFrame({
+        'ds': data.time,
+        'y': data.flow,
+    })
+
+    # 考虑日周期性与周周期性
+    m = NeuralProphet(epochs=15,
+                      growth="off",
+                      )
+
+    if type == '30minutes':
+        freq = '30min'
+        points = 48
+    elif type == 'hour':
+        freq = 'H'
+        points = 24
+    else:
+        print('type error')
+        sys.exit(0)
+
+    m.fit(df, freq=freq)
+
+    # 直接预测未来n天的数值
+    df_future = m.make_future_dataframe(df, periods=points*days)
+    forecast = m.predict(df_future)
+
+    # fig_forecast = m.plot(forecast)
+
+    return forecast
+
+
+# prophet 预测模型
+def prophet_model_speed_n(data: pd.DataFrame, type, days) -> pd.DataFrame:
+    df = pd.DataFrame({
+        'ds': data.time,
+        'y': data.speed,
+    })
+
+    # 考虑日周期性与周周期性
+    m = NeuralProphet(epochs=15,
+                      growth="off",
+                      )
+
+    if type == '30minutes':
+        freq = '30min'
+        points = 48
+    elif type == 'hour':
+        freq = 'H'
+        points = 24
+    else:
+        print('type error')
+        sys.exit(0)
+
+    m.fit(df, freq=freq)
+
+    # 直接预测未来n天的数值
+    df_future = m.make_future_dataframe(df, periods=points * days)
+    forecast = m.predict(df_future)
+
+    # fig_forecast = m.plot(forecast)
+
+    return forecast
+
+
 # 依据显示时间计算对应时间标签
 def time_sin_minutes(index):
     # 2021-01-25 18:45:00
@@ -263,6 +330,9 @@ def days_interval(start, end):
 
 
 def get15min_data_week(section_id, custom_time):
+    """
+    弃用, 请使用utils.db_operator的同名函数
+    """
     result_up = []
     result_down = []
 
@@ -727,6 +797,48 @@ def prophet_fin_process(flow_up, flow_down, speed_up, speed_down, name):
     return result_up, result_down
 
 
+def prophet_fin_process_n(flow_up, flow_down, speed_up, speed_down, name, days, type):
+    """
+    整合预测数据, 及计算拥堵指数
+    : param xx_xx is flow/speed; list
+    len (24*n)
+    : param name 用于确定车道数量以计算拥堵指数
+
+    : return result_up, result_down; list
+    result_xx columns are
+    traffic_flow_total, avg_speed_car, traffic_index
+    shape (n, 24, 3)
+    n天的24小时的 流量 速度 拥堵指数
+    """
+    result_up = []
+    result_down = []
+
+    if type == '30minutes':
+        factor = 2
+        points = 48
+    elif type == 'hour':
+        factor = 1
+        points = 48
+    else:
+        print('type error')
+        sys.exit(0)
+
+    # n天中的24小时
+    for i in range(days):
+        day_temp_up = []
+        day_temp_down = []
+        for j in range(points):
+            day_temp_up.append((flow_up[i * 24 + j], speed_up[i * 24 + j],
+                                traffic_index(factor*flow_up[i * 24 + j], speed_up[i * 24 + j], 'hour', name)))
+            day_temp_down.append((flow_down[i * 24 + j], speed_down[i * 24 + j],
+                                  traffic_index(factor*flow_down[i * 24 + j], speed_down[i * 24 + j], 'hour', name)))
+
+        result_up.append(day_temp_up)
+        result_down.append(day_temp_down)
+
+    return result_up, result_down
+
+
 def make_prediction_prophet(name, data_up, data_down):
     """
     一次预测未来14天数据
@@ -744,8 +856,8 @@ def make_prediction_prophet(name, data_up, data_down):
 
     # input_up = pd.read_csv('example_data/up.csv').sample(frac=0.2)
     # input_down = pd.read_csv('example_data/down.csv').sample(frac=0.2)
-    # input_up = pd.read_csv('example_data/up.csv')
-    # input_down = pd.read_csv('example_data/down.csv')
+    input_up = pd.read_csv('example_data/up.csv')
+    input_down = pd.read_csv('example_data/down.csv')
 
     # 预测流量
     flow_up = prophet_model_flow(input_up)
@@ -768,6 +880,113 @@ def make_prediction_prophet(name, data_up, data_down):
     # shape(14, 24, 3)
     # 14天的24小时的 流量 速度 拥堵指数
     return prophet_fin_process(flow_result_up, flow_result_down, speed_result_up, speed_result_down, name)
+
+
+def make_prediction_prophet_n(name, type, data_up, data_down, days):
+    """
+    一次预测未来n天数据, 节前3天+节假日期间+节后3天
+
+    :参数 name 对应 section_id
+    :参数 device 模型运行设备
+    :参数 mode 模型运行模式, 15minutes/hour
+    :参数 data_xx 对应 上行、下行历史数据 list
+    """
+    # 数据预处理
+    # columns=['flow', 'speed', 'time']
+    # 一个星期
+    # pandas 96*7 rows
+    input_up, input_down = prophet_pre_process(data_up, data_down)
+
+    # 七天提前量+节前三天+节日+节后三天
+    days = 7 + 3 + days + 3
+
+    # input_up = pd.read_csv('example_data/up.csv').sample(frac=0.2)
+    # input_down = pd.read_csv('example_data/down.csv').sample(frac=0.2)
+
+    # 预测流量
+    flow_up = prophet_model_flow_n(input_up, type, days)
+    flow_down = prophet_model_flow_n(input_down, type, days)
+
+    # 预测速度
+    speed_up = prophet_model_speed_n(input_up, type, days)
+    speed_down = prophet_model_speed_n(input_down, type, days)
+
+    # 15min原始数据转换
+    if type == '30minutes':
+        factor = 2
+    elif type == 'hour':
+        factor = 4
+    else:
+        print('type error')
+        sys.exit(0)
+
+    # 原始数据粒度为15min
+    # print(flow_up)
+    # numpy.ndarray 24*n
+    flow_result_up = flow_up.yhat1.values*factor
+    flow_result_down = flow_down.yhat1.values*factor
+    speed_result_up = speed_up.yhat1.values
+    speed_result_down = speed_down.yhat1.values
+
+    # 整合预测数据, 及计算拥堵指数
+    # : return result_up, result_down;
+    # list result_xx columns are
+    # traffic_flow_total, avg_speed_car, traffic_index
+    # shape(n, 24, 3)
+    # n天的24小时的 流量 速度 拥堵指数
+    return prophet_fin_process_n(flow_result_up, flow_result_down, speed_result_up, speed_result_down, name, days, type)
+
+
+def make_prediction_prophet_congestion(name, type, data_up, data_down, days):
+    """
+    一次预测未来n天数据
+
+    :参数 name 对应 section_id
+    :参数 device 模型运行设备
+    :参数 mode 模型运行模式, 15minutes/hour
+    :参数 data_xx 对应 上行、下行历史数据 list
+    """
+    # 数据预处理
+    # columns=['flow', 'speed', 'time']
+    # 一个星期
+    # pandas 96*7 rows
+    input_up, input_down = prophet_pre_process(data_up, data_down)
+
+    # input_up = pd.read_csv('example_data/up.csv').sample(frac=0.2)
+    # input_down = pd.read_csv('example_data/down.csv').sample(frac=0.2)
+
+    # 预测流量
+    flow_up = prophet_model_flow_n(input_up, type, days)
+    flow_down = prophet_model_flow_n(input_down, type, days)
+
+    # 预测速度
+    speed_up = prophet_model_speed_n(input_up, type, days)
+    speed_down = prophet_model_speed_n(input_down, type, days)
+
+    # 15min原始数据转换
+    if type == '30minutes':
+        factor = 2
+    elif type == 'hour':
+        factor = 4
+    else:
+        print('type error')
+        sys.exit(0)
+
+    # 原始数据粒度为15min
+    # print(flow_up)
+    # numpy.ndarray 24*n
+    flow_result_up = flow_up.yhat1.values*factor
+    flow_result_down = flow_down.yhat1.values*factor
+    speed_result_up = speed_up.yhat1.values
+    speed_result_down = speed_down.yhat1.values
+
+    # 整合预测数据, 及计算拥堵指数
+    # : return result_up, result_down;
+    # list result_xx columns are
+    # traffic_flow_total, avg_speed_car, traffic_index
+    # shape(n, 24, 3)
+    # n天的24小时的 流量 速度 拥堵指数
+    return prophet_fin_process_n(flow_result_up, flow_result_down, speed_result_up, speed_result_down, name, days, type)
 
 
 def day_data_process(result_up, result_down, days, name):
@@ -1049,6 +1268,36 @@ def congestion_data_process(result_up, result_down, days, name):
     return processed_up, process_down
 
 
+def congestion_data_process_n(result_up, result_down):
+    """
+    # result_xx columns are
+    # traffic_flow_total, avg_speed_car, traffic_index(拥堵指数）
+    # example (result_xx[0])
+    # (69.0, 100.0, 4) -> traffic_flow_total, avg_speed_car, traffic_index(拥堵指数)
+    # shape (48*n) list of tuple
+
+    :return
+    columns are
+    48*n 粒度 of traffic_index(拥堵指数)
+    example (result_xx[0])
+    [1, 1, ... 5, 3]
+    """
+
+    processed_up = []
+    process_down = []
+
+    for days in range(len(result_up)):
+        for points in range(48):
+            processed_up.append(result_up[days][points][2])
+            process_down.append(result_down[days][points][2])
+
+    # processed_xx columns are
+    # 48*n 粒度 of traffic_index(拥堵指数)
+    # example (result_xx[0])
+    # [1, 1, ... 5, 3]
+    return processed_up, process_down
+
+
 def next_time_minutes(now, count):
     # 计算之前，之后时间对应的时间字符串
     # 2021-01-25 18:45:00
@@ -1120,7 +1369,7 @@ def fourier_fit(x, base, *a):
         i_max = i
 
     # 周变化
-    for j in range(1, 4):
+    for j in range(1, 5):
         y = y + a[j + i_max - 1] * np.cos(2 * np.pi * j * x / 96 * 7) + a[-j - i_max] * np.sin(
             2 * np.pi * j * x / 96 * 7)
 
@@ -1131,19 +1380,19 @@ def fourier_pre_process(data_up, data_down):
     """
     数据格式预处理
     """
-    data_up_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
-    data_down_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
-    for i in data_up:
-        data_up_pd = data_up_pd.append({'flow': i[0], 'speed': i[1], 'time': i[2]}, ignore_index=True)
-    for j in data_down:
-        data_down_pd = data_down_pd.append({'flow': j[0], 'speed': j[1], 'time': j[2]}, ignore_index=True)
+    # data_up_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
+    # data_down_pd = pd.DataFrame(columns=['flow', 'speed', 'time'])
+    # for i in data_up:
+    #     data_up_pd = data_up_pd.append({'flow': i[0], 'speed': i[1], 'time': i[2]}, ignore_index=True)
+    # for j in data_down:
+    #     data_down_pd = data_down_pd.append({'flow': j[0], 'speed': j[1], 'time': j[2]}, ignore_index=True)
 
     # data_up_pd['time'] = pd.to_datetime(data_up_pd['time'], format='%Y-%m-%d %H:%M:%S')
     # data_down_pd['time'] = pd.to_datetime(data_down_pd['time'], format='%Y-%m-%d %H:%M:%S')
 
     # 读取本地数据以供测试
-    # data_up_pd = pd.read_csv('example_data/up.csv')
-    # data_down_pd = pd.read_csv('example_data/down.csv')
+    data_up_pd = pd.read_csv('example_data/up.csv')
+    data_down_pd = pd.read_csv('example_data/down.csv')
 
     x_group = np.arange(96 * 7)
     flow_up = data_up_pd['flow']
@@ -1163,13 +1412,14 @@ def make_prediction_fourier(name, input_data_up, input_data_down):
                                                                                                     input_data_down)
 
     # 估计参数
-    popt_flow_up = op.curve_fit(fourier_fit, x_group, input_up_flow, [1.0] * 9)[0]
-    popt_flow_down = op.curve_fit(fourier_fit, x_group, input_down_flow, [1.0] * 9)[0]
-    popt_speed_up = op.curve_fit(fourier_fit, x_group, input_up_speed, [1.0] * 9)[0]
-    popt_speed_down = op.curve_fit(fourier_fit, x_group, input_down_speed, [1.0] * 9)[0]
+    popt_flow_up = op.curve_fit(fourier_fit, x_group, input_up_flow, [1.0] * 10)[0]
+    popt_flow_down = op.curve_fit(fourier_fit, x_group, input_down_flow, [1.0] * 10)[0]
+    popt_speed_up = op.curve_fit(fourier_fit, x_group, input_up_speed, [1.0] * 10)[0]
+    popt_speed_down = op.curve_fit(fourier_fit, x_group, input_down_speed, [1.0] * 10)[0]
 
     # 计算未来值
-    x_predict = np.arange(96 * 7, 96 * 21)
+    # x_predict = np.arange(96 * 7, 96 * 21)
+    x_predict = np.arange(96*14)
 
     # numpy.ndarray 96*14
     flow_result_up = fourier_fit(x_predict, *popt_flow_up)

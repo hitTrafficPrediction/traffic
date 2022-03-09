@@ -116,6 +116,7 @@ def get15min_data_week(road_section, custom_time):
 
 
 def get15min_data_(road_section, custom_time):
+    # 原版sql读取
     init_db()
     cursor_data = db_data.cursor()
     data_table_15min = "section_condition_15minute"
