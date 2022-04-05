@@ -69,7 +69,7 @@ def get15min_data_week_(section_id, custom_time):
 def get15min_data_week(road_section, custom_time):
     init_db()
     cursor_data = db_data.cursor()
-    data_table_15min = "section_condition_15minute"
+    data_table_15min = "section_condition_15minute_2021"
 
     # 使得输入可以为24:00:00
     # custom_data = custom_time.split(' ')[0]
@@ -90,8 +90,8 @@ def get15min_data_week(road_section, custom_time):
     get15min_SQL = f'''
         SELECT traffic_flow_total,avg_speed_car, point_time_start, direction
         FROM {data_table_15min}
-        WHERE section_id = '{road_section}' AND point_time_start in ('{time_seq}')
-        ORDER BY point_time_start
+        WHERE section_id = '{road_section}' AND point_time_stop in ('{time_seq}')
+        ORDER BY point_time_stop
         '''
 
     data_up = []
@@ -111,7 +111,9 @@ def get15min_data_week(road_section, custom_time):
         print('插入失败')
     finally:
         db_data.close()
-    assert (len(data_up) == 96*7 and len(data_down)), '数据缺失'
+
+    assert (len(data_up) == 96*7), '数据缺失'
+    assert (len(data_down) == 96 * 7), '数据缺失'
     return [data_up, data_down]
 
 
@@ -140,14 +142,14 @@ def get15min_data_(road_section, custom_time):
     get15min_SQL_down = f'''
     SELECT traffic_flow_total,avg_speed_car, point_time_start
     FROM {data_table_15min}
-    WHERE section_id = '{road_section}' AND direction = '下行' AND point_time_start in ('{time_seq}')
-    ORDER BY point_time_start
+    WHERE section_id = '{road_section}' AND direction = '下行' AND point_time_stop in ('{time_seq}')
+    ORDER BY point_time_stop
     '''
     get15min_SQL_up = f'''
     SELECT traffic_flow_total,avg_speed_car, point_time_start
     FROM {data_table_15min}
-    WHERE section_id = '{road_section}' AND direction = '上行' AND point_time_start in ('{time_seq}')
-    ORDER BY point_time_start
+    WHERE section_id = '{road_section}' AND direction = '上行' AND point_time_stop in ('{time_seq}')
+    ORDER BY point_time_stop
     '''
     data_up = []
     data_down = []

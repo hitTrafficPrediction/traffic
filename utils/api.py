@@ -818,7 +818,7 @@ def prophet_fin_process_n(flow_up, flow_down, speed_up, speed_down, name, days, 
         points = 48
     elif type == 'hour':
         factor = 1
-        points = 48
+        points = 24
     else:
         print('type error')
         sys.exit(0)
@@ -828,10 +828,10 @@ def prophet_fin_process_n(flow_up, flow_down, speed_up, speed_down, name, days, 
         day_temp_up = []
         day_temp_down = []
         for j in range(points):
-            day_temp_up.append((flow_up[i * 24 + j], speed_up[i * 24 + j],
-                                traffic_index(factor*flow_up[i * 24 + j], speed_up[i * 24 + j], 'hour', name)))
-            day_temp_down.append((flow_down[i * 24 + j], speed_down[i * 24 + j],
-                                  traffic_index(factor*flow_down[i * 24 + j], speed_down[i * 24 + j], 'hour', name)))
+            day_temp_up.append((flow_up[i * points + j], speed_up[i * points + j],
+                                traffic_index(factor*flow_up[i * points + j], speed_up[i * points + j], 'hour', name)))
+            day_temp_down.append((flow_down[i * points + j], speed_down[i * points + j],
+                                  traffic_index(factor*flow_down[i * points + j], speed_down[i * points + j], 'hour', name)))
 
         result_up.append(day_temp_up)
         result_down.append(day_temp_down)
@@ -897,8 +897,9 @@ def make_prediction_prophet_n(name, type, data_up, data_down, days):
     # pandas 96*7 rows
     input_up, input_down = prophet_pre_process(data_up, data_down)
 
-    # 七天提前量+节前三天+节日+节后三天
-    days = 7 + 3 + days + 3
+    # 节前三天+节日+节后三天
+    holiday = days
+    days = 3 + days + 3
 
     # input_up = pd.read_csv('example_data/up.csv').sample(frac=0.2)
     # input_down = pd.read_csv('example_data/down.csv').sample(frac=0.2)
@@ -914,8 +915,10 @@ def make_prediction_prophet_n(name, type, data_up, data_down, days):
     # 15min原始数据转换
     if type == '30minutes':
         factor = 2
+        points = 48
     elif type == 'hour':
         factor = 4
+        points = 24
     else:
         print('type error')
         sys.exit(0)
@@ -927,6 +930,19 @@ def make_prediction_prophet_n(name, type, data_up, data_down, days):
     flow_result_down = flow_down.yhat1.values*factor
     speed_result_up = speed_up.yhat1.values
     speed_result_down = speed_down.yhat1.values
+
+
+    # 乘上节假日流量系数
+    factor_array = np.ones(flow_result_up.shape)
+    # 节假日期间高峰系数
+    factor_array[3*points:(3+holiday)*points] = 2
+    # 节假日第一天早高峰系数
+    factor_array[int(3*points+30/factor):int(3*points+36/factor)] = 2.75
+
+    flow_result_up = flow_result_up*factor_array
+    flow_result_down = flow_result_down*factor_array
+
+    # print(flow_result_up.shape)
 
     # 整合预测数据, 及计算拥堵指数
     # : return result_up, result_down;
