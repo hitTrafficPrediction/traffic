@@ -1,5 +1,5 @@
 from utils.db_operator import write_festival_data, get15min_data, get15min_data_week
-from utils.api import make_prediction, read_local_data, days_interval, holiday_data_process_hour, make_prediction_prophet_n
+from utils.api import next_day, read_local_data, days_interval, holiday_data_process_hour, make_prediction_prophet_n
 from utils.time_processor import get_day_start_time, get_current_proximity_time_str
 import datetime as dt
 
@@ -28,7 +28,7 @@ def main(state, custom_day):
     # 获取当前时间以供预测
     custom_time = get_current_proximity_time_str()
     custom_time = get_day_start_time(custom_time).strftime("%Y-%m-%d %H")
-    start_time, _ = custom_time.split(' ')
+    start_time = next_day(str(state['holiday']['start_date'] + ' 00'), -3)
 
     if custom_day:
         custom_time = custom_day + ' 00'
@@ -55,12 +55,12 @@ def main(state, custom_day):
         # shape (48) list of tuple
         result_up, result_down = make_prediction_prophet_n(section_id, 'hour', input_data_up, input_data_down, prediction_days)
 
-        write_festival_data(state['trace_id'], state, start_time + ' 00:00:00', result_up, result_down, 'hour')
+        write_festival_data(state['trace_id'], state, start_time + ':00:00', result_up, result_down, 'hour')
 
 
 if __name__ == '__main__':
     state = {
-        "trace_id": "11125",
+        "trace_id": "2022-04-05-0011",
         "expressway_number": "S15",
         "section_id": "S15-1",
         "holiday": {
