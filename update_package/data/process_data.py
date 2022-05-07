@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 from road_names import names
 from utils import time_sin, time_cos
@@ -70,6 +72,8 @@ def to_minute_data(data_file_name='15min_data.csv', save_dir='output_data/'):
         select_down.sort_values(by=['point_time_stop'], ascending=True)
 
         # 保存文件
+        if not os.path.isdir(save_dir):
+            os.mkdir(save_dir)
         select_up.to_csv(save_dir + name + '_up.csv', index=False)
         select_down.to_csv(save_dir + name + '_down.csv', index=False)
 
@@ -77,6 +81,5 @@ def to_minute_data(data_file_name='15min_data.csv', save_dir='output_data/'):
 if __name__ == '__main__':
     # df = pd.read_csv('kpi_section_condition_15minute.csv')
     # print(df.loc[0])
-    # simplify('raw_data/kpi_section_condition_15minute.csv')
-    # to_minute_data()
-    pass
+    simplify('raw_data/kpi_section_condition_15minute.csv')
+    to_minute_data()
