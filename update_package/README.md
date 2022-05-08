@@ -32,7 +32,7 @@
 
 ```
 
-python main.py --train_name='G1-1_up' --type='flow' --device='cpu  --save_pth=Ture
+python main.py --train_name='G1-1_up' --type='flow' --device='cpu'  --save_pth=Ture
 
 ```
 
