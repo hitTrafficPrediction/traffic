@@ -112,9 +112,9 @@ if __name__ == '__main__':
     parser.add_argument("--data_path", type=str, default='output_data/', help='数据存放路径')
     parser.add_argument("--save_path", type=str, default='checkpoints/', help='模型保存路径')
     parser.add_argument("--train_name", type=str, default='G1-1_up', help='需要训练的路段名字')
-    parser.add_argument("--type", type=str, default='speed', help='训练的路段类型, 流量或速度')
+    parser.add_argument("--type", type=str, default='flow', help='训练的路段类型, 流量或速度')
 
-    parser.add_argument("--device", type=str, default='cuda', help='训练平台')
+    parser.add_argument("--device", type=str, default='cpu', help='训练平台')
     parser.add_argument("--save_pth", type=bool, default=True, help='是否保存模型')
     args = vars(parser.parse_args())
 
