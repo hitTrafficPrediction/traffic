@@ -14,6 +14,8 @@ from utils.db_operator import get15min_data
 from scipy import optimize as op
 from fbprophet import Prophet
 from neuralprophet import NeuralProphet
+from itertools import product
+import statsmodels.api as sm
 
 
 # 神经网络定义类
@@ -279,6 +281,102 @@ def prophet_model_speed_n(data: pd.DataFrame, type, days) -> pd.DataFrame:
     # fig_forecast = m.plot(forecast)
 
     return forecast
+
+
+def optimizeSARIMA(parameters_list, d, D, data, s):
+    # p = d = q = range(0, 2)
+    # d = range(0, 2)
+    # pdq = list(product(p, d, q))
+    # seasonal_pdq = [(x[0], x[1], x[2], 12) for x in list(itertools.product(p, d, q))]
+    parameters = []
+    for param in parameters_list:
+        try:
+            model = sm.tsa.statespace.SARIMAX(
+                data,
+                order=(param[0], d, param[1]),
+                seasonal_order=(param[2], D, param[3], s),
+                enforce_stationarity=False,
+                enforce_invertibility=False
+            )
+            results = model.fit()
+            # print('ARIMA{}x{}12 - AIC:{}'.format(param, param_seasonal, results.aic))
+        except:
+            continue
+        aic = results.aic
+        parameters.append([param, aic])
+    result_table = pd.DataFrame(parameters)
+    result_table.columns = ['parameters', 'aic']
+    # sorting in ascending order, the lower AIC is - the better
+    result_table = result_table.sort_values(by='aic', ascending=True).reset_index(drop=True)
+
+    return result_table
+
+
+def auto_sarima_flow(data, pre_days, points_oneday):
+    data = data.flow
+    data = pd.DataFrame(data, dtype=np.float)
+    ps = range(1, 2)
+    qs = range(1, 2)
+    Ps = range(0, 2)
+    Qs = range(0, 2)
+    # ps = range(0, 1)
+    # qs = range(0, 1)
+    # Ps = range(0, 1)
+    # Qs = range(0, 1)
+
+    # creating list with all the possible combinations of parameters
+    parameters = product(ps, qs, Ps, Qs)
+    parameters_list = list(parameters)
+    result_table = optimizeSARIMA(parameters_list, 0, 1, data, points_oneday)
+    p, q, P, Q = result_table.parameters[0]
+    m = sm.tsa.statespace.SARIMAX(
+        data,
+        order=(p, 0, q),
+        seasonal_order=(P, 1, Q, points_oneday),
+        enforce_stationarity=False,
+        enforce_invertibility=False
+    )
+
+    results = m.fit()
+    forecast_values = results.get_forecast(steps=points_oneday * pre_days)
+    # print(results.fittedvalues)
+
+    # 获取预测结果并返回，结果存放在predicted_mean列，最后重置索引
+    return forecast_values.predicted_mean.reset_index(drop=True).values
+
+
+def auto_sarima_speed(data, pre_days, points_oneday):
+    data = data.speed.values
+    data = pd.DataFrame(data, dtype=np.float)
+    ps = range(1, 2)
+    qs = range(1, 2)
+    Ps = range(0, 2)
+    Qs = range(0, 2)
+
+    # ps = range(0, 1)
+    # qs = range(0, 1)
+    # Ps = range(0, 1)
+    # Qs = range(0, 1)
+
+    # creating list with all the possible combinations of parameters
+    parameters = product(ps, qs, Ps, Qs)
+    parameters_list = list(parameters)
+    result_table = optimizeSARIMA(parameters_list, 0, 1, data, points_oneday)
+    p, q, P, Q = result_table.parameters[0]
+    m = sm.tsa.statespace.SARIMAX(
+        data,
+        order=(p, 0, q),
+        seasonal_order=(P, 1, Q, points_oneday),
+        enforce_stationarity=False,
+        enforce_invertibility=False
+    )
+
+    results = m.fit()
+    forecast_values = results.get_forecast(steps=points_oneday * pre_days)
+    # print(results.fittedvalues)
+
+    # 获取预测结果并返回，结果存放在predicted_mean列，最后重置索引
+    return forecast_values.predicted_mean.reset_index(drop=True).values
 
 
 # 依据显示时间计算对应时间标签
@@ -941,6 +1039,78 @@ def make_prediction_prophet_n(name, type, data_up, data_down, days):
 
     flow_result_up = flow_result_up*factor_array
     flow_result_down = flow_result_down*factor_array
+
+    # print(flow_result_up.shape)
+
+    # 整合预测数据, 及计算拥堵指数
+    # : return result_up, result_down;
+    # list result_xx columns are
+    # traffic_flow_total, avg_speed_car, traffic_index
+    # shape(n, 24, 3)
+    # n天的24小时的 流量 速度 拥堵指数
+    return prophet_fin_process_n(flow_result_up, flow_result_down, speed_result_up, speed_result_down, name, days, type)
+
+
+def make_prediction_sarima(name, type, data_up, data_down, days):
+    """
+    一次预测未来n天数据, 节前3天+节假日期间+节后3天
+
+    :参数 name 对应 section_id
+    :参数 device 模型运行设备
+    :参数 mode 模型运行模式, 15minutes/hour
+    :参数 data_xx 对应 上行、下行历史数据 list
+    """
+    # 数据预处理
+    # columns=['flow', 'speed', 'time']
+    # 一个星期
+    # pandas 96*7 rows
+    input_up, input_down = prophet_pre_process(data_up, data_down)
+
+    # 节前三天+节日+节后三天
+    holiday = days
+    days = 3 + days + 3
+
+    # 15min原始数据转换
+    if type == '30minutes':
+        factor = 2
+        points = 48
+    elif type == 'hour':
+        factor = 4
+        points = 24
+    else:
+        print('type error')
+        sys.exit(0)
+
+    # input_up = pd.read_csv('example_data/up.csv').sample(frac=0.2)
+    # input_down = pd.read_csv('example_data/down.csv').sample(frac=0.2)
+
+    # 预测流量
+    # auto_sarima_flow(data, pre_days, points_oneday):
+    flow_up = auto_sarima_flow(input_up, days, points)
+    flow_down = auto_sarima_flow(input_down, days, points)
+
+    # 预测速度
+    speed_up = auto_sarima_speed(input_up, days, points)
+    speed_down = auto_sarima_speed(input_down, days, points)
+
+    # 原始数据粒度为15min
+    # print(flow_up)
+    # numpy.ndarray 24*n
+    flow_result_up = flow_up*factor
+    flow_result_down = flow_down*factor
+
+    # print(flow_result_up)
+    # 乘上节假日流量系数
+    factor_array = np.ones(flow_result_up.shape)
+    # 节假日期间高峰系数
+    factor_array[3*points:(3+holiday)*points] = 2
+    # 节假日第一天早高峰系数
+    factor_array[int(3*points+30/factor):int(3*points+36/factor)] = 2.75
+
+    flow_result_up = flow_result_up*factor_array
+    flow_result_down = flow_result_down*factor_array
+    speed_result_up = speed_up
+    speed_result_down = speed_down
 
     # print(flow_result_up.shape)
 
