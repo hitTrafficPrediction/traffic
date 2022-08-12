@@ -857,8 +857,11 @@ def prophet_pre_process(data_up, data_down):
     for j in data_down:
         data_down_pd = data_down_pd.append({'flow': j[0], 'speed': j[1], 'time': j[2]}, ignore_index=True)
 
-    # data_up_pd['time'] = pd.to_datetime(data_up_pd['time'], format='%Y-%m-%d %H:%M:%S')
-    # data_down_pd['time'] = pd.to_datetime(data_down_pd['time'], format='%Y-%m-%d %H:%M:%S')
+    data_up_pd['time'] = pd.to_datetime(data_up_pd['time'], format='%Y-%m-%d %H:%M:%S')
+    data_down_pd['time'] = pd.to_datetime(data_down_pd['time'], format='%Y-%m-%d %H:%M:%S')
+    data_up_pd = data_up_pd.sort_values(by=['time'], ascending=True).reset_index(drop=True)
+    data_down_pd = data_down_pd.sort_values(by=['time'], ascending=True).reset_index(drop=True)
+
 
     return data_up_pd, data_down_pd
 
