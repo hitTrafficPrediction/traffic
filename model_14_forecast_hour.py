@@ -1,5 +1,5 @@
 from utils.db_operator import write_festival_data, get15min_data, get15min_data_week
-from utils.api import next_day, read_local_data, days_interval, holiday_data_process_hour, make_prediction_prophet_n
+from utils.api import next_day, read_local_data, days_interval, holiday_data_process_hour, make_prediction_prophet_n, make_prediction_sarima
 from utils.time_processor import get_day_start_time, get_current_proximity_time_str
 import datetime as dt
 
@@ -54,6 +54,9 @@ def main(state, custom_day):
         # (69.0, 100.0, 4) -> traffic_flow_total, avg_speed_car, traffic_index(拥堵指数)
         # shape (48) list of tuple
         result_up, result_down = make_prediction_prophet_n(section_id, 'hour', input_data_up, input_data_down, prediction_days)
+
+        # 新增使用sarima预测的方式
+        # result_up, result_down = make_prediction_sarima(section_id, 'hour', input_data_up, input_data_down, prediction_days)
 
         write_festival_data(state['trace_id'], state, start_time + ':00:00', result_up, result_down, 'hour')
 
